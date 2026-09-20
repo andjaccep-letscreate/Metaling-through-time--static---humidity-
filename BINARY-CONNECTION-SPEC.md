@@ -1,6 +1,6 @@
 # BINARY CONNECTION — Crossover Save Specification
 **Metaling Through Time · Build & Production**
-Schema version: 2 · Status: **REGISTRY FROZEN** · Audited 2026-09-10
+Schema version: 2 · Status: **REGISTRY FROZEN** · Audited 2026-09-10 · Amended 2026-09-12 (universal artifacts, six-slot layout)
 
 Supersedes all earlier save drafts. Volume Two is the first emitter of this
 format.
@@ -18,6 +18,10 @@ Never a settings menu.
 - Success: "Connection established. Crew restored."
 - Failure: "Connection incomplete. That signal is missing pieces."
 
+**Where it lives:** the code is presented on the **last page of the Agency
+notepad** (Section 4.3), with the retrieve and copy behaviour above. The
+notepad is the home; the menu entry opens it.
+
 No player-facing copy uses "save code", "import", "export", or "localStorage".
 
 ---
@@ -32,13 +36,16 @@ No player-facing copy uses "save code", "import", "export", or "localStorage".
 **The cache stores the code string itself, nothing else.** One format, one
 decoder, one validator. There is no second "internal" save shape to drift.
 
-Every storage access is wrapped in try/catch — in blocked browsers it *throws*,
-it does not return null. The game is fully playable with storage permanently
-unavailable.
+Every storage access is wrapped in try/catch, and **any** failure — an
+exception, a null, a write that silently does nothing — is treated as "no
+cache." We do not assume how a given browser fails; we assume it can. The game
+is fully playable with storage permanently unavailable.
 
-**Why:** the game runs in a cross-origin iframe on itch.io, where browsers
-partition or clear storage; Safari deletes unused site data after about a week
-and we are mobile-first; itch.io and GitHub Pages are separate origins and can
+**Why (verified 2026-09):** the game runs in a cross-origin iframe on itch.io,
+where browsers partition or clear storage; Safari's ITP deletes a site's
+script-writable storage after seven days of Safari use without interaction on
+that site — which applies to first-party hosting too, so GitHub Pages players
+are exposed as well; itch.io and GitHub Pages are separate origins and can
 never read each other's storage. The code lives with the player instead.
 
 ### Arriving without a code is the normal path
@@ -117,18 +124,24 @@ BIT   ID                          KIND
 
  16–31  RESERVED — vol1, assigned when vol1 is remade
 
- 32   vol2.acc.titanium.chip      accessory
- 33   vol2.acc.silver.cleat       accessory
- 34   vol2.acc.platinum.glasses   accessory
- 35   vol2.acc.gold.<tbd>         accessory
- 36   vol2.acc.gold.<tbd>.mod     accessory   (modified variant, separate ID)
- 40   vol2.wpn.gold.<tbd>         weapon
- 41   vol2.wpn.silver.<tbd>       weapon
- 42   vol2.wpn.titanium.<tbd>     weapon
- 43   vol2.wpn.platinum.<tbd>     weapon
+ 32   vol2.acc.chip               accessory
+ 33   vol2.acc.cleat              accessory
+ 34   vol2.acc.glasses            accessory
+ 35   vol2.acc.<tbd>              accessory
+ 36   vol2.acc.<tbd>.mod          accessory   (modified variant, separate ID)
+ 40   vol2.wpn.<tbd>              weapon
+ 41   vol2.wpn.<tbd>              weapon
+ 42   vol2.wpn.<tbd>              weapon
+ 43   vol2.wpn.<tbd>              weapon
 
- 64   vol2.abl.<owner>.<tbd>      ability
+ 64   vol2.abl.<tbd>              ability
 ```
+
+**Items carry a TYPE, never an owner.** Every registry item is `weapon`,
+`accessory`, or `equipment`. Any non-bonded item may be equipped by any
+character. The only character-locked case in the whole format is bonded
+equipment (Section 4.2). The `<owner>` segment that appeared in earlier drafts
+is gone; bit numbers are unchanged.
 
 **Three rules, permanent:**
 
@@ -175,6 +188,11 @@ Facts only. Never numbers.
 | Weapon tier per character | |
 | Game completion and ending tier | |
 
+**The code stores WHAT is owned and WHERE it is equipped. What an item DOES —
+perk, stat, requirements — is defined per game and never stored.** This is what
+lets a later game upgrade every existing artifact without touching a single
+code.
+
 Stats are rebuilt on every load from the current game's level band table. This
 is the locked charter rule — real progression is tools, not numbers — and it is
 what lets us rebalance any game later without invalidating a single code.
@@ -183,22 +201,35 @@ what lets us rebalance any game later without invalidating a single code.
 lower one or clear a completion. Re-finding owned gear sets an already-set bit,
 which is naturally idempotent — no double-reward logic is needed.
 
-### 4.1 EXCLUSION — the Agency pocket watch is not gear
+### 4.1 EXCLUSION — Agency kit is not gear
 
-Every detective carries an Agency-issued quartz pocket watch, personalized and
-bound to them, permanent and unlosable. It is an **inherent character property**.
+Every detective carries standard Agency issue: the quartz pocket watch, the
+sunglasses, the notepad and pen, and the summonable dimensional briefcase that
+serves as the inventory. All four are **inherent character properties**.
 
-- It is **never** a weapon.
-- It is **never** an accessory.
-- It **never** occupies a slot.
-- It is **never** in the registry and needs no bit, because possession is
-  universal and unconditional — a bit whose value is always 1 stores nothing.
+- None is ever a weapon.
+- None is ever an accessory.
+- None ever occupies a slot.
+- None is in the registry or needs a bit, because possession is universal and
+  unconditional — a bit whose value is always 1 stores nothing.
+
+**The Agency sunglasses and the librarian's glasses are different kinds of
+thing.** The sunglasses are kit — always present, never equipped. The
+librarian's glasses (`vol2.acc.platinum.glasses`) are an episode-exclusive
+accessory that occupies a slot. They never compete. Any implementation that
+puts the sunglasses in a slot has misread this section.
+
+**Briefcase availability is game-local, never in the code.** Whether the
+briefcase can be summoned right now — which zone, in combat or not, area sealed
+or not — is a fact about where the player is standing, not about who the crew
+is. It lives in `mtt.vol2.progress` with the rest of in-game position and dies
+with the game.
 
 **Why this exclusion is written down:** each character has exactly two accessory
 slots, and those slots are where the entire episode-exclusive collection hook
-lives. Modelling the watch as an accessory would permanently consume half of
-that space to represent something every character always has. The watch is
-character definition, not inventory.
+lives. Modelling any piece of kit as an accessory would permanently consume
+space to represent something every character always has. Kit is character
+definition, not inventory.
 
 ### 4.2 EXCLUSION — bonded equipment is a character property
 
@@ -214,13 +245,38 @@ it stores no information and gets no bit.**
 
 **Three consequences to build against:**
 
-1. A bonded weapon means that character's **weapon slot is fixed, not empty**.
-   She cannot equip a different weapon. Her two accessory slots remain fully
-   open, so the episode-exclusive collection hook is untouched for her.
+1. A bonded weapon means that character's **weapon1 slot is fixed, not empty**.
+   She cannot equip a different weapon there. Every other slot — weapon2, both
+   accessories, both equipment — remains open. (Whether weapon2 is also bonded
+   for her is a Volume Three design call; the format supports either.)
 2. She still needs a **weapon tier** for level-band sync, so the tier section
    covers her exactly like anyone else. Bonded means unchangeable, not absent.
-3. **A bonded weapon slot always encodes as 0 in the Equipped section.** The
+3. **A bonded slot always encodes as 0 in the Equipped section.** The
    game's roster table knows the slot is bonded; the code does not need to.
+
+### 4.3 DERIVED VIEW — the notepad case log
+
+The notepad is a case log **derived entirely from bits that already exist**. It
+stores nothing new and has no bit of its own.
+
+| Notepad entry | Derived from |
+|---|---|
+| Boss freed | That zone's artifact bit is set |
+| Final boss resolved | That game's Endings byte is non-zero |
+| Case title, zone, names | Display tables, never the code |
+
+Organised **by volume, then by zone order** — never by play order. Play order is
+not stored and never will be.
+
+**Rule: every game embeds display names — boss, item, case title — for EVERY
+prior volume.** A code from another game must render readable entries, not bit
+numbers. These are the same tables `?decode=` already requires; the notepad and
+`?decode=` share one source. The display tables are append-only like the
+registry: a game's names are added when it enters Phase 0 and carried by every
+game after it.
+
+This follows directly from the Section 4 principle: the code says *what* is
+owned; each game decides what that *means* and how it *reads*.
 
 ---
 
@@ -239,11 +295,18 @@ MTT<version>-<base64url payload, no padding>
 | # | Section | Size | Contents |
 |---|---|---|---|
 | 1 | Flags | 1 length byte + N bytes | Registry bitfield, little-endian bit order, trailing zero bytes trimmed |
-| 2 | Equipped | 3 indices per set character bit | Registry index per slot: weapon, acc1, acc2. 0 = empty or bonded |
+| 2 | Equipped | **6 indices** per set character bit | Registry index per slot, fixed order: **weapon1, weapon2, acc1, acc2, equip1, equip2**. 0 = empty or bonded |
 | 3 | Tier | 1 byte per set character bit | Weapon tier 1–3 |
 | 4 | Endings | 1 length byte + N bytes | Byte *i* = ending tier of game *i+1*. 0 = not cleared, 1–3 = cleared at that tier. Trailing zeros trimmed |
 | 5 | Extension | everything remaining | Bytes appended by a newer schema version, preserved verbatim |
 | 6 | Checksum | 3 bytes | FNV-1a 32-bit over sections 1–5, truncated to the low 24 bits, written most-significant byte first |
+
+### The six-slot layout
+Volume Two exposes only weapon1, acc1, and acc2. It **writes 0 for the other
+three** and ignores any non-zero value it finds there — but preserves such values
+as data (see Section 6) so a later game's assignments survive a round trip.
+Volume Three expands to all six without a migration: the layout was reserved on
+day one.
 
 ### Checksum byte order
 The 24-bit checksum is written **most-significant byte first** (big-endian):
@@ -261,7 +324,7 @@ so the format never hits a ceiling as later games push the registry past 255.
 Equipped and Tier are sized by the **count of set bits in the character bit set**,
 in ascending bit order. A code from a future game may carry a recruit this build
 does not recognise. That recruit is not rostered but **still occupies its slot and
-tier bytes**, which are preserved verbatim.
+tier bytes** — six slot indices and one tier — which are preserved verbatim.
 
 **Why:** if the decoder sized these sections by the characters it successfully
 rosters, a code containing one unknown recruit would count one fewer character
@@ -277,9 +340,10 @@ corpus is canonical.
 
 ### Expected length
 A complete Volume Two run — full crew, chemist recruited, all nine exclusives,
-everything equipped — is about **39 bytes, or roughly 55 characters** including
-the prefix. An earlier draft estimated 30–45; that was optimistic. It grows by
-roughly 5–8 characters per additional game with a fully equipped recruit.
+everything equipped — is about **54 bytes, or roughly 75 characters** including
+the prefix. Reserving six slots instead of three costs about 20 characters
+today and saves a migration later. It grows by roughly 10 characters per
+additional game with a fully equipped recruit.
 Copy-paste only; never typed.
 
 UI: large read-only field, **Copy button mandatory**, native share sheet where
@@ -302,12 +366,14 @@ is ever `undefined`.
 | `crew.<recruit>.unlocked` | bool | `false` | One per recruit bit; "recruited," not "playable here" |
 | `crew.*.abilities` | array | `[]` | Resolved from ability bits |
 | `gear.owned` | array | `[]` | Positive-only; never stores "not found" |
-| `gear.equipped.*.weapon` | id\|null | `null` | Always null for a bonded slot |
-| `gear.equipped.*.acc` | array | `[null, null]` | Two accessory slots |
+| `gear.equipped.*.weapon` | array | `[null, null]` | weapon1, weapon2. weapon1 always null for a bonded slot |
+| `gear.equipped.*.acc` | array | `[null, null]` | acc1, acc2 |
+| `gear.equipped.*.equip` | array | `[null, null]` | equip1, equip2 — reserved, unused in Volume Two |
+| `gear.equipped.*.reserved` | array | `[0,0,0]` | Raw indices read from weapon2/equip1/equip2, preserved for write-back |
 | `gear.tier.*` | int | `1` | Weapon tier 1–3 |
 | `vols.<n>.tier` | int | `0` | 0 = not cleared, 1–3 = ending tier. Holds every index found in Endings, known games or not |
 | `unknownBits` | array | `[]` | Registry bit positions set in the code that this build does not recognise |
-| `unknownRecruits` | map | `{}` | Bit → `{ slots: [i, i, i], tier: t }` for set character bits this build cannot roster |
+| `unknownRecruits` | map | `{}` | Bit → `{ slots: [i×6], tier: t }` for set character bits this build cannot roster |
 | `extension` | bytes | empty | Everything between Endings and the checksum, verbatim |
 
 **Absence is the default.** No negative fact is ever stored. A player who never
@@ -329,8 +395,10 @@ whatever their correct offset is in the new payload:
 - `unknownBits` are set in the rebuilt Flags at their original bit positions,
   extending the section if needed.
 - `unknownRecruits` are emitted in ascending bit order alongside rostered
-  characters, each contributing its three slot indices and tier byte exactly as
+  characters, each contributing its six slot indices and tier byte exactly as
   read.
+- Slots this game does not expose (weapon2, equip1, equip2 in Volume Two) are
+  written back from `reserved` exactly as read, never zeroed.
 - `vols` entries this build does not know are written at their index in Endings.
 - `extension` is appended verbatim after Endings.
 
@@ -339,9 +407,10 @@ because the encoder is deterministic. It comes from rebuilding, not patching.
 
 ### Accessory dependency rule
 Each accessory declares what it needs (`requires: "titanium.drone"`). If that is
-absent in the current game, the item stays owned, stays visible in the
-collection, and shows as **dormant** with a plain-English reason. Never an
-error, never dropped, never silently inert.
+absent in the current game — or on the character it is equipped to — the item
+stays owned, stays **equippable**, and shows as **dormant** with a plain-English
+reason. Never an error, never dropped, never unequipped, never silently inert.
+The chip on Silver is a valid, dormant state.
 
 ---
 
@@ -385,8 +454,9 @@ valid older code.**
 
 **Step 6 — Resolve defensively.** `unknownBits` are reported as unrecognised
 and never resolved. Equipped indices pointing at unowned or unknown items →
-slot cleared. Weapon index in an accessory slot, or an item on the wrong
-character → slot cleared. Non-zero index in a bonded slot → cleared. Tier outside
+slot cleared. Index whose registry type does not match the slot type → slot
+cleared. Non-zero index in a bonded slot → cleared. Non-zero index in a slot
+this game does not expose → **kept in `reserved`, not cleared.** Tier outside
 1–3 → clamped. Ending tier outside 0–3 → clamped. Nothing throws.
 
 **Step 7 — Sync to band.** Stats from the band table plus weapon tier;
@@ -424,10 +494,12 @@ error.
 | 16 | Version 99 code with extra trailing section | Forward mode; Extension preserved |
 | 17 | Registry bit set beyond this build's table | Preserved in `unknownBits`, inert |
 | 18 | Equipped index → unowned item | Slot cleared |
-| 19 | Equipped index → unknown item | Slot cleared, ownership bit preserved |
+| 19 | Equipped index → unknown item | Slot cleared, owned-bit preserved in unknownBits |
 | 20 | Weapon index in accessory slot | Slot cleared |
-| 21 | Item equipped to wrong character | Slot cleared |
+| 21 | **Chip equipped on Silver** (unmet `requires`) | Loads fine, stays equipped, shows dormant with reason |
 | 22 | Non-zero index in a bonded slot | Slot cleared, bonded weapon retained |
+| 22a | Non-zero index in weapon2 / equip1 / equip2 | Not applied in Volume Two; preserved in `reserved`; round-trips byte-identical |
+| 22b | Accessory index in a weapon slot | Slot cleared (type mismatch) |
 | 23 | Two-byte index (registry ≥ 128) | Decodes correctly |
 | 24 | Chip owned, Titanium has no drone kit | Dormant, explained, retained |
 | 25 | Both base and modified Gold item owned | Both retained, one equippable |
@@ -489,8 +561,8 @@ The registry is frozen as of this document. Precisely:
 - The character bit set {0–3, 6–15}
 - Every row that has an assigned bit number
 - The bit number of any ID already written down
-- The section order, sizing rules, index encoding, and checksum byte order in
-  Section 5
+- The section order, sizing rules, six-slot layout and slot order, index
+  encoding, and checksum byte order in Section 5
 - The rule that a newer version may only append sections after Endings
 
 **Not frozen — normal work:**
